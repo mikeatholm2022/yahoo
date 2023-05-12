@@ -1,5 +1,6 @@
 # This script will download historical prices fom yahoo and insert them into the database
 # Reference:    https://pypi.org/project/yfinance/
+#               https://github.com/ranaroussi/yfinance
 #               https://www.analyticsvidhya.com/blog/2021/06/download-financial-dataset-using-yahoo-finance-in-python-a-complete-guide/
 
 
@@ -28,6 +29,16 @@ def get_sql_server_connection():
     return conn
 
 
+def is_date_within_our_filter(act_dt, dt_from, dt_to):
+    pit_date = datetime.strptime(act_dt, "%Y-%m-%d")
+    from_date = datetime.strptime(dt_from, "%Y-%m-%d")
+    to_date = datetime.strptime(dt_to, "%Y-%m-%d")
+    if from_date <= pit_date <= to_date:
+        return True
+
+    return False
+
+
 def get_supported_symbols(conn):
     cursor = conn.cursor()
     sql = 'SELECT * FROM view_yahoo_symbols;'
@@ -53,9 +64,25 @@ def download_yahoo_historical_prices():
 
     conn = get_sql_server_connection()
     get_supported_symbols(conn)
+    # symbols.clear()
+    # symbols['AMD'] = 49
 
     for s, i in symbols.items():
-        df = yf.download(s, dt_from, dt_to)
+        # Default from date is the one we generated above
+        filter_from = dt_from
+
+        # First we need to know if a corporate action occurred for this symbol
+        sym = yf.Ticker(s)
+        sym.info
+        act = sym.actions
+        # print('actions', act)
+        if len(act) > 0:
+            act_dt = rf"{str(act.index[len(act)-1])[0:10]}"
+            if is_date_within_our_filter(act_dt, dt_from, dt_to):
+                print("Corporate Action occurred, you need to download the whole timeseries for", s)
+                filter_from = "2020-01-01"
+
+        df = yf.download(s, filter_from, dt_to)
         # print(df)
         # Retrieve data
         # df.to_csv(rf'C:\repo\yahoo\{s}.csv', index=False)
@@ -71,22 +98,11 @@ def download_yahoo_historical_prices():
             adj = float('{:0.2f}'.format(df.iloc[r, 4]))
             v = int(df.iloc[r, 5])
             # print(dt, o, h, l, c, adj, v)
+            print("Uploading ", s, dt)
             params = (dt, i, o, h, l, c, adj, v)
             sql = "{CALL sp_upsert_yahoo_ohlc (?,?,?,?,?,?,?,?)}"
             cursor = conn.cursor()
-            cursor.execute(sql, params)
-
-        # Additional information that might be helpful
-        # sym = yf.Ticker(s)
-        # sym.info
-        # div = sym.dividends
-        # print(div)
-        # act = sym.actions
-        # print(act)
-        # spl = sym.splits
-        # print(spl)
-        # earn = sym.earnings_dates
-        # print(earn)
+            # cursor.execute(sql, params)
 
 
 if __name__ == '__main__':
