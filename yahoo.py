@@ -24,6 +24,11 @@ def get_tomorrows_date():
     return dt.strftime('%Y-%m-%d')
 
 
+def get_todays_date():
+    dt = datetime.today()
+    return dt.strftime('%Y%m%d')
+
+
 def get_sql_server_connection():
     conn = pyodbc.connect('DSN=chaos;Trusted_Connection=yes;APP=yahoo_script', autocommit=True)
     return conn
@@ -67,6 +72,8 @@ def download_yahoo_historical_prices():
     # symbols.clear()
     # symbols['AMD'] = 49
 
+    logger = open(rf"C:\chaos\logs\yahoo_uploader_{get_todays_date()}.log", "w")
+
     for s, i in symbols.items():
         # Default from date is the one we generated above
         filter_from = dt_from
@@ -79,7 +86,9 @@ def download_yahoo_historical_prices():
         if len(act) > 0:
             act_dt = rf"{str(act.index[len(act)-1])[0:10]}"
             if is_date_within_our_filter(act_dt, dt_from, dt_to):
-                print("Corporate Action occurred, you need to download the whole timeseries for", s)
+                my_str = f"Corporate Action occurred, you need to download the whole timeseries for {s}\n"
+                print(my_str)
+                logger.write(my_str)
                 filter_from = "2020-01-01"
 
         df = yf.download(s, filter_from, dt_to)
@@ -89,6 +98,7 @@ def download_yahoo_historical_prices():
         # print(df.filter(items=['2023-04-05'], axis=0))
         # print(len(df), df['Open'].values[0], df['High'].values[0])
         # print('Date\t', 'Open\t', 'High\t', 'Low\t', 'Close\t', 'AdjClose\t', 'Volume')
+        print("Downloading ", s)
         for r in range(0, len(df)):
             dt = rf"{str(df.index[r])[0:10]}"
             o = float('{:0.2f}'.format(df.iloc[r, 0]))
@@ -98,11 +108,15 @@ def download_yahoo_historical_prices():
             adj = float('{:0.2f}'.format(df.iloc[r, 4]))
             v = int(df.iloc[r, 5])
             # print(dt, o, h, l, c, adj, v)
-            print("Uploading ", s, dt)
+            my_str = f"Uploading {s} for {dt}\n"
+            # print(my_str)
+            logger.write(my_str)
             params = (dt, i, o, h, l, c, adj, v)
             sql = "{CALL sp_upsert_yahoo_ohlc (?,?,?,?,?,?,?,?)}"
             cursor = conn.cursor()
-            # cursor.execute(sql, params)
+            cursor.execute(sql, params)
+
+    logger.close()
 
 
 if __name__ == '__main__':
