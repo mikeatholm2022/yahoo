@@ -1,2 +1,2 @@
 # yahoo
-Python application for downloading historical market data from yahoo
+Python application for downloading historical US equity market data from yahoo. It checks for corporate actions and if one exists between the dates specified it will redownload all of the data since Jan 1st 2020. When a corporate action occurs you must adjust the closing price correctly or else you will see artifical jumps in price which never existed. These jumps will make all analysis on the data invalid. It assume access to the chaos MS SQL server schema.
